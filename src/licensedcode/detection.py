@@ -124,6 +124,7 @@ class DetectionRule(Enum):
     These are logged in LicenseDetection.detection_log for verbosity.
     """
     UNKNOWN_MATCH = 'unknown-match'
+    EXTRA_WORDS = 'extra-words'
     LICENSE_CLUES = 'license-clues'
     LOW_QUALITY_MATCH_FRAGMENTS = 'low-quality-matches'
     FALSE_POSITIVE = 'possible-false-positive'
@@ -1054,9 +1055,26 @@ def is_correct_detection_non_unknown(license_matches):
     are correct/perfect license detections and also there aren't any unknowns.
     """
     return (
-        is_correct_detection(license_matches)
+        is_correct_detection_2(license_matches)
         and not has_unknown_matches(license_matches)
     )
+
+def is_correct_detection_2(license_matches):
+    """
+    Return True if all the matches in ``license_matches`` List of LicenseMatch
+    are perfect license detections, and the matcher is always either `1-hash` 
+    or `1-spdx-id`.
+    """
+    matchers = (license_match.matcher for license_match in license_matches)
+    is_match_coverage_perfect = [
+        license_match.coverage() == 100
+        for license_match in license_matches
+    ]
+
+    return (
+        all(matcher in ("1-hash", "1-spdx-id") for matcher in matchers)
+        and all(is_match_coverage_perfect)
+    )    
 
 
 def is_correct_detection(license_matches):
@@ -1545,6 +1563,13 @@ def get_detected_license_expression(
         # in detections but ideally we should return synthetic unknowns for these
         detection_log.append(DetectionRule.LOW_QUALITY_MATCH_FRAGMENTS.value)
         return detection_log, combined_expression
+    
+    elif analysis == DetectionCategory.EXTRA_WORDS.value:
+        if TRACE_ANALYSIS:
+            logger_debug(f'analysis {DetectionCategory.EXTRA_WORDS.value}')
+        # Apply filtering or handling logic if needed
+        matches_for_expression = license_matches
+        detection_log.append(DetectionRule.EXTRA_WORDS.value)
 
     else:
         if TRACE_ANALYSIS:
@@ -1726,7 +1751,7 @@ def analyze_detection(license_matches, package_license=False):
     ):
         return DetectionCategory.LICENSE_CLUES.value
 
-    # Case where all matches have `matcher` as `1-hash` or `4-spdx-id`
+    # Case where all matches have `matcher` as `1-hash` or `1-spdx-id`
     elif is_correct_detection_non_unknown(license_matches=license_matches):
         return DetectionCategory.PERFECT_DETECTION.value
 
